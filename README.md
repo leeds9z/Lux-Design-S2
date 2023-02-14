@@ -1,4 +1,4 @@
-# Lux-Design-S2-JACK ETHAN EVAN
+# Lux-Design-S2-JACK ETHAN EVAN SIMON
 
 [![PyPI version](https://badge.fury.io/py/luxai_s2.svg)](https://badge.fury.io/py/luxai_s2)
 
