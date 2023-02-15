@@ -9,6 +9,7 @@ class Agent():
         self.opp_player = "player_1" if self.player == "player_0" else "player_0"
         np.random.seed(0)
         self.env_cfg: EnvConfig = env_cfg
+        self.num_robots = 0
 
     def early_setup(self, step: int, obs, remainingOverageTime: int = 60):
         if step == 0:
@@ -29,9 +30,19 @@ class Agent():
             if factories_to_place > 0 and my_turn_to_place:
                 # we will spawn our factory in a random location with 150 metal and water if it is our turn to place
                 potential_spawns = np.array(list(zip(*np.where(obs["board"]["valid_spawns_mask"] == 1))))
-                spawn_loc = potential_spawns[np.random.randint(0, len(potential_spawns))]
-                return dict(spawn=spawn_loc, metal=150, water=150)
+                
+                ice_map = game_state.board.ice
+                spawn_loc = (1, 1)
+                for (x, y), ice in np.ndenumerate(ice_map):
+                    for sx, sy in potential_spawns:
+                        if(y == sy and sx == x + 2 and ice == 1):
+                            spawn_loc = (sx, sy)
+                            break
+
+                # spawn_loc = potential_spawns[np.random.randint(0, len(potential_spawns))]
+                return dict(spawn=spawn_loc, metal=factories_to_place * 150, water=factories_to_place * 150)
             return dict()
+
 
     def act(self, step: int, obs, remainingOverageTime: int = 60):
         actions = dict()
@@ -49,10 +60,11 @@ class Agent():
         factory_tiles, factory_units = [], []
         for unit_id, factory in factories.items():
             if factory.power >= self.env_cfg.ROBOTS["HEAVY"].POWER_COST and \
-            factory.cargo.metal >= self.env_cfg.ROBOTS["HEAVY"].METAL_COST:
+            factory.cargo.metal >= self.env_cfg.ROBOTS["HEAVY"].METAL_COST and self.num_robots < 1:
                 actions[unit_id] = factory.build_heavy()
-            if factory.water_cost(game_state) <= factory.cargo.water / 5 - 200:
-                actions[unit_id] = factory.water()
+                self.num_robots += 1
+            # if factory.water_cost(game_state) <= factory.cargo.water / 5 - 200:
+            #     actions[unit_id] = factory.water()
             factory_tiles += [factory.pos]
             factory_units += [factory]
         factory_tiles = np.array(factory_tiles)
@@ -72,7 +84,7 @@ class Agent():
                 adjacent_to_factory = np.mean((closest_factory_tile - unit.pos) ** 2) == 0
 
                 # previous ice mining code
-                if unit.cargo.ice < 40:
+                if unit.cargo.ice < 400:
                     ice_tile_distances = np.mean((ice_tile_locations - unit.pos) ** 2, 1)
                     closest_ice_tile = ice_tile_locations[np.argmin(ice_tile_distances)]
                     if np.all(closest_ice_tile == unit.pos):
@@ -84,10 +96,12 @@ class Agent():
                         if move_cost is not None and unit.power >= move_cost + unit.action_queue_cost(game_state):
                             actions[unit_id] = [unit.move(direction, repeat=0, n=1)]
                 # else if we have enough ice, we go back to the factory and dump it.
-                elif unit.cargo.ice >= 40:
+                elif unit.cargo.ice >= 400:
                     direction = direction_to(unit.pos, closest_factory_tile)
                     if adjacent_to_factory:
-                        if unit.power >= unit.action_queue_cost(game_state):
+                        if unit.power < 2000:
+                            actions[unit_id] = [unit.pickup(4, 3000, repeat=0, n=1)]
+                        elif unit.power >= unit.action_queue_cost(game_state):
                             actions[unit_id] = [unit.transfer(direction, 0, unit.cargo.ice, repeat=0)]
                     else:
                         move_cost = unit.move_cost(game_state, direction)
